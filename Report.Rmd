@@ -1,0 +1,649 @@
+---
+title: "Risk factors for cardiovascular disease"
+author: "Team 7: Adrian Fils-Aime, Ajinkya Deshmukh, Sandhat Bylapudi, Silvia Chalkou"
+date: "12/17/2020"
+output: html_document
+---
+
+## Introduction
+
+Cardiovascular disease kills one American every 36 seconds, around 655,000 deaths each year or 1 in every four deaths. The most spread heart diseases are Arrhythmia, Atherosclerosis, Cardiomyopathy, Congenital heart defects, and Coronary heart disease. These diseases cost the United States about $219 Billion each year, including health care services, medicines, and loss of productivity due to deaths. The heart disease that we will be focusing on in our analysis is Coronary heart disease (CHD). CHD is caused by an excessive buildup of plaque, a yellow waxy substance, inside the coronary artery. This buildup leads to heart attacks, strokes, or chest pains.  CHD is the most common heart disease that killed 360,000 Americans in 2017. About 6.7 percent of American adults have CHD. The best way to prevent or reduce the risk of CHD is by living a healthy lifestyle. Good habits like not smoking, exercising, maintaining a healthy weight, and eating a healthy diet may prevent CHD.
+
+The dataset that we used is a cardiovascular study on residents of Framingham, Massachusetts. Here is the link to our dataset https://www.kaggle.com/amanajmera1/framingham-heart-study-dataset. Initially, our dataset had around 4000 records and 15 attributes. After scanning our dataset, we noticed that some columns had missing information. We then decided to clean our dataset, leaving us with around 3749 observations. Our dataset variables are gender, age, current smoker, number of cigarettes smoked per day, body mass index (BMI), systolic blood pressure, diastolic blood pressure, heart rate, glucose level, cholesterol level, presence of diabetes, previous stroke.
+
+## Methodology
+
+Before starting our analysis, we set some goals and made some hypotheses. One central question was: What is the influence of various demographics on CHD risk in ten years? We assumed that systolic blood pressure, age, smoking, total cholesterol, and BMI would significantly impact a ten-year risk of CHD. Another question that we had was: What influence do various demographics have on systolic blood pressure? We chose systolic blood pressure for further analysis as we assumed and found throughout research that systolic BP has a significant impact on ten year CHD risk and wanted to examine the influence of the demographics on systolic BP. We assumed that age, BMI, total cholesterol, and smoking would affect blood pressure. Finally, we decided to predict systolic blood pressure and the ten-year risk of coronary heart disease. Our agenda for our analysis consists of exploratory data analysis, fitting linear regression and regression trees, fitting logistic regression and classification trees, and running the unsupervised learning method of Principal Component Analysis (PCA).
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Preparing the dataset
+
+```{r include = TRUE}
+file <- "framinghamM.csv"
+FramInitial <- read.csv(file, header = TRUE)
+```
+
+```{r}
+Fram <- FramInitial
+Fram <- transform(Fram, TenYearCHD = as.factor(TenYearCHD), male = as.factor(male), currentSmoker = as.factor(currentSmoker), BPMeds = as.factor(BPMeds), prevStroke = as.factor(prevStroke), prevHyp = as.factor(prevHyp), diabetes = as.factor(diabetes))
+```
+
+```{r include = FALSE}
+library(funModeling) 
+library(tidyverse) 
+library(Hmisc)
+library(corrplot)
+```
+### Getting the metrics about data types
+```{r}
+# Number of observations (rows) and variables, and a head of the first cases.
+glimpse(Fram)
+```
+
+## Exploratory Data Analysis
+
+### Analysis of categorical variables
+
+We began the data analysis by exploring our categorical variables. The bar charts show that there is a balanced distribution between men and women. There is also an almost uniform distribution between people who smoke and people who don’t. We also observed an imbalance between people with diabetes and people without diabetes, and a similar trend in people who took blood pressure pills and people with previous stroke history. These observations will impact the results of our analysis.
+
+```{r}
+par(mfrow = c(4, 2))
+freq(Fram)
+```
+
+### Analysis of numerical variables
+
+We explored numerical variables. E.g., age ranged from 32 to 70 years. The number of cigarettes smoked per day varies between 0 and 70 cigarettes. The histogram shows that this numerical variable is skewed to the right. The distributions for cholesterol and systolic blood pressure are also skewed to the right. On the other hand, we observed that diastolic blood pressure ranged from a minimum of 48 to a maximum of 142.5, and the histogram is more close to a normal distribution.
+
+#### Summary
+```{r}
+Age <-  Fram$age; Cigs_per_Day <- Fram$cigsPerDay; BMI <- Fram$BMI; Heart_Rate <- Fram$heartRate
+Systolic_BP <- Fram$sysBP; Diastolic_BP <- Fram$diaBP; Total_Cholesterol <- Fram$totChol; Glucose <- Fram$glucose
+summary(data.frame(Age, Cigs_per_Day, Total_Cholesterol))
+summary(data.frame(Systolic_BP, Diastolic_BP, BMI))
+summary(data.frame(Heart_Rate, Glucose))
+```
+
+
+#### Histograms
+```{r}
+plot_num(Fram)
+```
+
+
+#### Correlation matrix
+
+The correlation matrix calculates the correlation between each pair of numeric variables.
+
+```{r}
+Age <- Fram$age; CigsPerDay <- Fram$cigsPerDay; totCholest <- Fram$totChol
+sysBP <- Fram$sysBP; diaBP <- Fram$diaBP; BMI <- Fram$BMI; heartRate <- Fram$heartRate
+Glucose <- Fram$glucose
+correlations <- cor(data.frame(Age, CigsPerDay, totCholest, sysBP, diaBP, BMI, heartRate, Glucose))
+correlations
+```
+
+These pair-wise correlations can be plotted in a correlation matrix plot to understand which variables change together.
+
+```{r}
+corrplot(correlations, method="circle")
+```
+
+
+We have used a dot-representation. Blue represents positive correlation and red negative. The larger the dot the larger the correlation. The correlation matrix shows that there is a quite strong positive correlation between Diastolic Blood Pressure and Systolic Blood Pressure (0.786). There are moderate positive correlations between BMI and both types of Blood Pressure (0.33 and 0.38) as well as between Systolic Blood Pressure and Age. All the other correlations can bee considered week correlations (negative or positive) that may also be interesting to observe. (All these correlations are linear.)
+
+
+#### Scatterplots Matrix
+
+```{r}
+pairs(~ age + cigsPerDay + totChol + sysBP + diaBP + BMI + heartRate + glucose, data = Fram, col=Fram$TenYearCHD)
+```
+
+### Exploring the data before fitting the Logistic Regression
+
+We continued exploring the data graphically in order to investigate the association between the 10-year risk of CHD and the demographic features of Framingham residents. Boxplots are useful to answer this question. 
+
+```{r}
+par(mfrow = c(1, 4))
+plot(Fram$age ~ Fram$TenYearCHD, col = c(4, 2), xlab = "TenYearCHD", ylab = "age")
+plot(Fram$cigsPerDay ~ Fram$TenYearCHD, col = c(4, 2), xlab = "TenYearCHD", ylab = "cigsPerDay")
+plot(Fram$BMI ~ Fram$TenYearCHD, col = c(4, 2), xlab = "TenYearCHD", ylab = "BMI")
+plot(Fram$heartRate ~ Fram$TenYearCHD, col = c(4, 2), xlab = "TenYearCHD", ylab = "heartRate")
+```
+
+The boxplots above show that there is a strong association of TenYearCHD with Age, a less strong association with cigsPerDay and BMI, and a weak association with heartRate. 
+
+```{r}
+par(mfrow = c(1, 4))
+plot(Fram$totChol ~ Fram$TenYearCHD, col = c(4, 2), xlab = "TenYearCHD", ylab = "totChol")
+plot(Fram$glucose ~ Fram$TenYearCHD, col = c(4, 2), xlab = "TenYearCHD", ylab = "glucose")
+plot(Fram$sysBP ~ Fram$TenYearCHD, col = c(4, 2), xlab = "TenYearCHD", ylab = "sysBP")
+plot(Fram$diaBP ~ Fram$TenYearCHD, col = c(4, 2), xlab = "TenYearCHD", ylab = "diaBP")
+```
+
+The boxplots above show that there is a strong association of TenYearCHD with sysBP and diaBP, a less strong association with totChol, and weak association with glucose, which also shows plenty of outliers.  
+
+### Creating a train and a test subset
+```{r}
+set.seed(123)
+train <- sample(1:nrow(Fram), as.integer(nrow(Fram)*0.75))
+test.fram <- Fram[-train, ]
+```
+
+
+### Logistic Model Selection
+From the full data model we have removed the variables that have an obvious correlations with some other variables. These are the categorical variable currentSmoker that has a deterministic relationship with cigsPerDay (see boxplot below), and the numerical variable diaBP that has a strong linear correlation with sysBP (78%) as seen in our scatterplot matrix above.
+
+```{r}
+m.empty <- glm(TenYearCHD ~ 1, data = Fram, family = binomial)
+m.full <- glm(TenYearCHD ~ .- currentSmoker - diaBP, data = Fram, family = binomial)
+```
+
+#### AIC
+```{r}
+m.bwd <- step(m.full, scope = list(lower = m.empty$formula, upper = m.full$formula), direction = 'backward', K = 2, trace = 0)
+m.bwd$coefficients
+
+m.fwd <- step(m.empty, scope = list(lower = m.empty$formula, upper = m.full$formula), direction = 'forward', K = 2, trace = 0 )
+m.fwd$coefficients
+```
+
+#### BIC
+```{r}
+m.bwd <- step(m.full, scope = list(lower = m.empty$formula, upper = m.full$formula), direction = 'backward', K = log(nrow(Fram)), trace = 0)
+m.bwd$coefficients
+
+m.fwd <- step(m.empty, scope = list(lower = m.empty$formula, upper = m.full$formula), direction = 'forward', K = log(nrow(Fram)), trace = 0 )
+m.fwd$coefficients
+```
+Both the AIC and BIC (backward addition) have chosen 8 variables and eliminated some of them: 
+
+- heartRate was excluded because the association with TenYearCHD is weak as proved by the corresponding boxplot above;
+- diabetes was excluded because it has a strong correlation with glucose (see the boxplot below) and glucose is in our model
+- BMI was also excluded (it decreased the AIC), even though we can see an association of BMI with TenYearCHD in the boxplot above.
+
+BMI is one of the variables that we initially assumed to have an influence on TenYearCHD, and that finally proved to be excluded from the model by AIC / BIC, and even if we include it in our model it will not be a significant predictor. The reason is that BMI already has a moderate correlation with sysBP at 0.33 (as well as with diaBP at 0.38) as it can be noted from the correlation matrix and scatterplots matrix. There is also a strong association between BMI and prevStroke as well as a moderate association between BMI and gender as it can be noted from the boxplots below. Having sysBP, prevStroke and gender in the model explains the redundancy of BMI.
+
+```{r}
+par(mfrow = c(1, 4))
+plot(Fram$BMI ~ Fram$male, col = c(4, 2), xlab = "male", ylab = "BMI")
+plot(Fram$BMI ~ Fram$prevStroke, col = c(4, 2), xlab = "prevStroke", ylab = "BMI")
+plot(Fram$glucose ~ Fram$diabetes, col = c(4, 2), xlab = "diabetes", ylab = "glucose")
+plot(Fram$cigsPerDay ~ Fram$currentSmoker, col = c(4, 2), xlab = "currentSmokker", ylab = "cigsPerDay")
+```
+
+
+### Logistic Regression
+Having selected the predictors by using the Backward Addition AIC we fit a logistic regression model on the train subset that is a random sample of 75% of the data. The response variable is TenYearCHD. 
+
+```{r}
+glm.Fram <- glm(TenYearCHD ~ male + age + cigsPerDay + prevStroke + prevHyp + totChol + sysBP + glucose, family = binomial, data = Fram, subset = train)
+glm.Fram$coefficients
+glm.Fram$deviance
+```
+
+prevHyp (which means whether or not the patient was hypertensive in the past) was selected by AIC. This is proved by the  boxplots below  that show that prevHyp does not have a  strong enough correlation with other variables as to be excluded from the model. Moreover that prevHyp is related to having hypertension in the past, while sysBP is a currently measured variable that may change or be sustained with BP meds. 
+
+```{r}
+par(mfrow = c(1, 3))
+plot(Fram$sysBP ~ Fram$prevHyp, col = c(4, 2), xlab = "prevHyp", ylab = "sysBP")
+plot(Fram$totChol ~ Fram$prevHyp, col = c(4, 2), xlab = "prevHyp", ylab = "totChol")
+plot(Fram$age ~ Fram$prevHyp, col = c(4, 2), xlab = "prevHyp", ylab = "age")
+```
+
+All the signs of the coefficients of the model are positive, meaning all the variables have a positive impact on TenYearCHD. For example, the positive sign for the male variable means that males are more likely to have a CHD in ten years than women when all the other variables remain the same. Older people are more prone to CHD in ten years, all else being equal.People with higher sysBP have a higher risk of CHD in ten year, all else being equal. 
+
+##### Confidence Intervals of the coefficients.
+
+```{r}
+tab.coef <- summary(glm.Fram)$coef
+alpha = 1 - 0.95
+moe <- tab.coef[ , "Std. Error"] * qnorm(1-alpha/2) # margins of error
+CI <- tab.coef[ , "Estimate"] + c(-moe, moe)
+
+for (i in (1:8)){
+  print('')
+  print(c(CI[i], CI[i + 8]))
+}
+```
+
+
+##### To evaluate the precition power of our model we have tested the prediction on the test subset (25%)
+```{r}
+prob <- predict(glm.Fram, newdata = test.fram, type = "response")
+pred <- rep(0, nrow(test.fram))
+pred[prob > 0.5] <- 1
+```
+
+##### Confusion Matrix. Accuracy of prediction. Test Error. 
+```{r}
+table(pred, test.fram$TenYearCHD)
+# Accuracy of prediction
+mean(pred == test.fram$TenYearCHD)
+# Test Error of prediction
+mean(pred != test.fram$TenYearCHD) 
+```
+
+Our logistic model has quite a good performance because it is able to predict with an accuracy of more than 86% and a test error of only 14%.
+
+
+### Visualization of Logistic Regression
+
+To visualize the logistic regression for the predictors, we have grouped the observations to create buckets. For this purpose we need the response variable to be numerical, that is why we will not transform it into a categorical variable by using as.factor(). We fit a logistic regression for each of the predictor and compare the fitted with observed probabilities. Then we have also created residual plots for grouped data. Almost all of the graphs proves that the model fit seems to be reasonable. We can see some exceptions:
+
+- sysBP: for sysBP higher than 213 the logistic model seems not to fit exactly. This is because the number of observations with the sysBP of 213 and higher account for only 0.37% of the entire data set.
+- totChol: for totChol higher than 380 the logistic model seems not to fit exactly. This is because the number of observations with the totChol of 380 and higher account for only 0.51% of the entire data set.
+- glucose: for glucose higher than 265 the logistic model seems not to fit exactly. This is because the number of observations with the glucose of higher than 265 account for only 0.37% of the entire data set.
+- cigsPerDay: Over 40 cigs per day the logistic model collapses. From zero to 40 cigs the more the person smokes the higher the probability of CHD in ten years. However, for a daily consumption of cigs per day of over 40 the trend changes and our regression does not fit well. It seems that it is not possible to make the model fit better controlling the other variables because in our entire sample there are only two persons with daily consumption of cigs more than 43 with 1 for TenYearCHD (see the table below). The respective sample with zero for TenYearCHD consists of 16 individuals (see the next table below). If we have a closer look at this subset the maximum age is 59 years and the average age is 47.56 years compared to 70 and 49.58 years respectively for the entire data set. They have a fairly acceptable state of health. None of them had a stroke history, none of them have diabetes. Their means of sysBP and glucose are lower than the ones of the entire dataset. And this in spite of higher BMI and TotChol averages. Is this an implication that smoking more than 43 cigs per day becomes beneficial to our health? The answer lies in three limitations of our data.
+
+-- The first limitation is that we don’t have any information about whether people used to smoke but currently do not. This information is important because for the most part people abandon smoking after they reach a certain age or / and face serious health problems. In this way such people appear in our dataset as nonsmokers and their health problems is a distorting factor in our dataset.
+
+-- It is obvious that a person’s general state of health and the related risks for the future depend not only on the current pattern of cigs consumption. They also depend on their entire smoking history and its evolution pattern. There are plenty of people that drastically, substantially or moderately reduce their consumption of cigs after a certain age or as soon as they start having certain health problems. This category of people enters our dataset with their current decreased consumption of cigs. And this accounts for the second limitation of our dataset. 
+
+-- The third limitation of our dataset is that people over 59 and with a daily consumption of cigs over than 43 that have already passed away cannot possibly appear in any dataset of this kind.  
+
+As a result, predicting TenYearCHD by a model with cigsPerDay as a predictor will lose in accuracy for the consumption of more than 40 cigs per day. 
+
+```{r}
+Fram143 <- FramInitial[FramInitial$cigsPerDay > 43 & FramInitial$TenYearCHD == 1, ]
+Fram143
+
+Fram043 <- FramInitial[FramInitial$cigsPerDay > 43 & FramInitial$TenYearCHD == 0, ]
+Fram043
+summary(Fram043)
+```
+
+
+```{r}
+Fram <- FramInitial
+```
+
+
+```{r}
+Fram$bucket <- cut(Fram$age, breaks = seq(32, 72, by = 5))
+m <- glm(TenYearCHD ~ age, data = Fram, family = binomial)
+chd.fit <- fitted(m)
+farm.agg <- aggregate(cbind(age, TenYearCHD, chd.fit) ~ bucket, data = Fram, FUN = mean)
+print(farm.agg)
+plot(TenYearCHD ~ age, data = farm.agg, col = 'blue', ylab = "probabilities")
+lines(chd.fit ~ age, data = farm.agg, col = "red", lwd = 2)
+plot(TenYearCHD - chd.fit ~ age, data = farm.agg)
+Fram$bucket <- NULL
+```
+
+
+```{r}
+Fram$bucket <- cut(Fram$sysBP, breaks = seq(83, 308, by = 15))
+m <- glm(TenYearCHD ~ sysBP, data = Fram, family = binomial)
+chd.fit <- fitted(m)
+farm.agg <- aggregate(cbind(sysBP, TenYearCHD, chd.fit) ~ bucket, data = Fram, FUN = mean)
+print(farm.agg)
+plot(TenYearCHD ~ sysBP, data = farm.agg, col = 'blue', ylab = "probabilities")
+lines(chd.fit ~ sysBP, data = farm.agg, col = "green", lwd = 2)
+plot(TenYearCHD - chd.fit ~ sysBP, data = farm.agg)
+Fram$bucket <- NULL
+```
+
+
+```{r}
+Fram$bucket <- cut(Fram$glucose, breaks = seq(40, 410, by = 25))
+m <- glm(TenYearCHD ~ glucose, data = Fram, family = binomial)
+chd.fit <- fitted(m)
+farm.agg <- aggregate(cbind(glucose, TenYearCHD, chd.fit) ~ bucket, data = Fram, FUN = mean)
+print(farm.agg)
+plot(TenYearCHD ~ glucose, data = farm.agg, col = 'blue', ylab = "probabilities")
+lines(chd.fit ~ glucose, data = farm.agg, col = "red", lwd = 2)
+plot(TenYearCHD - chd.fit ~ glucose, data = farm.agg)
+Fram$bucket <- NULL
+```
+
+
+```{r}
+Fram$bucket <- cut(Fram$cigsPerDay, breaks = seq(0, 70, by = 10))
+m <- glm(TenYearCHD ~ cigsPerDay, data = Fram, family = binomial)
+chd.fit <- fitted(m)
+farm.agg <- aggregate(cbind(cigsPerDay, TenYearCHD, chd.fit) ~ bucket, data = Fram, FUN = mean)
+print(farm.agg)
+plot(TenYearCHD ~ cigsPerDay, data = farm.agg, col = 'blue', ylab = "probabilities")
+lines(chd.fit ~ cigsPerDay, data = farm.agg, col = "black", lwd = 2)
+plot(TenYearCHD - chd.fit ~ cigsPerDay, data = farm.agg)
+Fram$bucket <- NULL
+```
+
+```{r}
+Fram$bucket <- cut(Fram$totChol, breaks = seq(110, 700, by = 30))
+m <- glm(TenYearCHD ~ totChol, data = Fram, family = binomial)
+chd.fit <- fitted(m)
+farm.agg <- aggregate(cbind(totChol, TenYearCHD, chd.fit) ~ bucket, data = Fram, FUN = mean)
+print(farm.agg)
+plot(TenYearCHD ~ totChol, data = farm.agg, col = 'blue', ylab = "probabilities")
+lines(chd.fit ~ totChol, data = farm.agg, col = "green", lwd = 2)
+plot(TenYearCHD - chd.fit ~ totChol, data = farm.agg)
+Fram$bucket <- NULL
+```
+
+```{r}
+Fram$bucket <- cut(Fram$BMI, breaks = seq(10, 60, by = 5))
+m <- glm(TenYearCHD ~ BMI, data = Fram, family = binomial)
+chd.fit <- fitted(m)
+farm.agg <- aggregate(cbind(BMI, TenYearCHD, chd.fit) ~ bucket, data = Fram, FUN = mean)
+print(farm.agg)
+plot(TenYearCHD ~ BMI, data = farm.agg, col = 'blue', ylab = "probabilities")
+lines(chd.fit ~ BMI, data = farm.agg, col = "orange", lwd = 2)
+plot(TenYearCHD - chd.fit ~ BMI, data = farm.agg)
+Fram$bucket <- NULL
+```
+
+## Classification Tree
+
+In our further research we went through classifying the data and finding patterns with the help of supervised learning by using the classification tree. For fitting a classification tree we have transformed the response variable into a categorical type by using as.factor(). 
+
+```{r}
+Fram <- FramInitial
+Fram <- transform(Fram, TenYearCHD = as.factor(TenYearCHD), male = as.factor(male), currentSmoker = as.factor(currentSmoker), BPMeds = as.factor(BPMeds), prevStroke = as.factor(prevStroke), prevHyp = as.factor(prevHyp), diabetes = as.factor(diabetes))
+```
+
+The bar charts of our categorical data from EDA show that only 15% of the residents have the risk of TenYearCHD. To be able to fit a classification tree we had to select a homogeneous sample with an equal number of observations split between the risk of TenYearCHD equal to 1 and 0. 
+```{r}
+CHD <- Fram[Fram$TenYearCHD == 1, ]
+non.CHD <- Fram[Fram$TenYearCHD == 0, ]
+#set.seed(123)
+sample20 <- sample(1:nrow(non.CHD), nrow(CHD))
+CHD5050 <- rbind(CHD[ , ], non.CHD[sample20, ])
+CHD5050 <- transform(CHD5050, TenYearCHD = as.factor(TenYearCHD))
+```
+
+```{r}
+set.seed(123)
+train5050 <- sample(1:nrow(CHD5050), as.integer(nrow(CHD5050)*0.5))
+CHD5050.test <- CHD5050[-train5050, ]
+
+```
+
+```{r include = FALSE}
+library(tree)
+```
+
+First we fit a classification tree with the 50%/50% subset CHD5050, and we get a reasonable tree with the insample  misclassification of 35.4%.
+
+```{r}
+tree.fram <- tree(TenYearCHD ~ ., data = CHD5050, split = "deviance")
+summary(tree.fram)
+plot(tree.fram)
+text(tree.fram, pretty = 0)
+```
+
+#### Cross validation
+
+We used the cv.tree() function to see whether pruning the tree will improve performance.
+
+```{r}
+set.seed(123)
+cv.fram <- cv.tree(tree.fram, FUN = prune.misclass, K = 5)
+cv.fram
+(bestsize <- cv.fram$size[cv.fram$dev == min(cv.fram$dev)])
+prune.fram <- prune.tree(tree.fram, best = min(bestsize), method = "misclass")
+summary(prune.fram)
+plot(prune.fram)
+text(prune.fram, pretty = 0)
+```
+
+The classification tree above makes sense and can be interpreted as follows:
+
+People younger than 46.5 years have a lower risk of CHD in ten years. People older than 46.5 years with a sysBP lower than 135.5 and glucose lower than 124.5 also have a lower risk of CHD in ten years. However, people older than 46.5 with a sysBP higher than 135.5 have a higher risk of CHD in ten years. Also, people older than 46.5 with a sysBP lower than 135.5 and a glucose level higher than 124.5 have a higher risk of CHD in ten years. Meaning that for people older than 46.5 years the risk is determined whether by a higher than 135.5 sysBP or by a higher than 124.5 glucose. 
+
+Next we wanted to evaluate the performance of the classification tree by estimating its test error. For this purpose we have fit a classification tree on the training set train5050 defined above. However, the classification tree fitted on the train5050 looks very different from the classification tree that was fitted for the set CHD5050. This means that the classification tree model is quite unstable and cannot be used in predicting TenYearCHD. 
+
+```{r}
+tree.fram <- tree(TenYearCHD ~ ., data = CHD5050, subset = train5050, split = "deviance")
+summary(tree.fram)
+plot(tree.fram)
+text(tree.fram, pretty = 0)
+```
+
+#### Cross validation
+
+We used the cv.tree() function to see whether pruning the tree will improve performance.
+
+```{r}
+set.seed(123)
+cv.fram <- cv.tree(tree.fram, FUN = prune.misclass, K = 5)
+cv.fram
+(bestsize <- cv.fram$size[cv.fram$dev == min(cv.fram$dev)])
+prune.fram <- prune.tree(tree.fram, best = min(bestsize), method = "misclass")
+summary(prune.fram)
+plot(prune.fram)
+text(prune.fram, pretty = 0)
+```
+
+
+## Linear Regression on Systolic Blood Pressure
+
+We run a linear regression on sysBP using all the independent variables (Except TenYearCHD which is the binary variable for CHD risk and diaBP, which from the scatterplot matrix mentioned in the preliminary analysis from above, clearly has a positive correlation with sysBP).
+```{r}
+m1 <- lm(sysBP ~. - TenYearCHD - diaBP, data = Fram)
+summary(m1)
+```
+
+The full model summary has a decent R squared value and a low p-value which is good. We can see that most of the variables are important for predicting the systolic BP. We see that the model summary indicates that BPMeds which is the binary variable for taking blood pressure medication also has a low P value. This however is counter intuitive as a person takes BP medication only after having problems and cannot be used to predicting the systolic BP , and so we will remove BPMeds in the further models.
+
+We now run an AIC Model Selection
+Forward and Backward Models
+```{r}
+full.model <- lm(sysBP ~. - TenYearCHD - diaBP - BPMeds, data = Fram)
+Null.model <- lm(sysBP ~ 1, data = Fram)
+
+step.modelb <- step(full.model, direction = "backward", 
+                      trace = FALSE)
+
+step.modelf <- step(full.model, direction = "forward", 
+                      trace = FALSE)
+summary(step.modelb)
+```
+
+The backward model eliminates currentSmoker, cigsPerDay, prevStroke and diabetes. The forward model chooses all the variables i.e. it is similar to the full model. Comparing the R-Squared values for the backward (0.547) and forward (0.5468) models, the backward model is a better fit as it uses lesser variables to predict sysBP while having a better R-squared value.
+
+### Residual Plots
+
+```{r}
+plot(step.modelb$residuals ~ step.modelb$fitted.values, col=Fram$prevHyp, 
+     xlab="Predicted", ylab="Residuals")
+abline(h=0)
+legend("topleft",c("Previous Hypertension : No","Previous Hypertension : Yes"),pch=16,col=1:2)
+```
+
+Upon plotting the residual vs fitted for step.modelb we noticed that there was no problem with the homogeneity of the residuals but they were creating two separate clusters. Upon further inspection we realized these points are clustered based on the variable prevHyp (which is a binary variable that indicates whether the person has a history of hypertension or not). 
+
+We now try and predict a few values of sysBP using both the full model (full.model) and the backward AIC model (step.modelb) 
+```{r}
+set.seed(21)
+new <- sample(1:nrow(test.fram), as.integer(nrow(test.fram)*0.005))
+newdata <- test.fram[new,]
+#Observed Data
+newdata['sysBP']
+```
+```{r}
+#Predicted Data
+predict(step.modelb, newdata)
+predict(full.model, newdata)
+```
+
+The first two predictions are considerably off the mark while the latter two are more close to the observed values. Let's take a look at the mean squared errors.
+
+```{r}
+set.seed(123)
+train <- sample(1:nrow(Fram), as.integer(nrow(Fram)*0.75))
+test.fram <- Fram[-train, ]
+
+yhat <- predict(full.model, newdata = Fram[-train, ])
+mean((yhat - Fram[-train, 'sysBP'])^2)
+
+yhat <- predict(step.modelb, newdata = Fram[-train, ])
+mean((yhat - Fram[-train, 'sysBP'])^2)
+```
+The model selected by AIC has a lower mspe, although it's only a slight difference.
+We now make a regression tree based on the full model to check which variables are signifcant to predict the sysBP.
+```{r}
+library(tree)
+tree.reg <- tree(full.model, data = Fram, subset = train)
+summary(tree.reg)
+yhat <- predict(tree.reg, newdata = Fram[-train, ])
+mean((yhat - Fram[-train, 'sysBP'])^2)
+```
+
+```{r}
+plot(tree.reg)
+text(tree.reg, pretty = 0)
+```
+
+The above plot of the tree indicates that prevHyp is the most influential in predicting systolic BP followed by BMI on one side of the tree and age on the other hand. The tree can be explained as follows: 
+
+- if a person has not had a history of hypertension(prevHyp) then their BMI used alongside prevHyp is most significant in predicting sysBP. 
+- otherwise it is age alongside which prevHyp.
+
+Now we try to prune the regression tree.
+```{r}
+set.seed(567)
+(cv.Fram <- cv.tree(tree.reg, FUN = prune.tree, K = 10))
+(bestsize <- cv.Fram$size[which.min(cv.Fram$dev)])
+prune.Fram <- prune.tree(tree.reg, best = bestsize)
+summary(prune.Fram)
+yhat <- predict(prune.Fram, newdata = Fram[-train, ])
+mean((yhat - Fram[-train, 'sysBP'])^2)
+```
+The pruning does not reduce the number of terminal nodes and this indicates that the original tree does a satisfactory job of explaining the variables mentioned. 
+
+## Unsupervised Learning
+We now move onto unsupervised learning and use PCA to check the classification power of our data using only the continuous(numerical) variables. In other words we wish to check if TenYearCHD risk can be classified using just the numerical variables and whether our data is suitable to conduct PCA analysis.
+
+```{r, include=FALSE}
+library(pls)
+FramPCA <- data.frame(Fram$TenYearCHD ,Fram$age, Fram$cigsPerDay, Fram$totChol, Fram$sysBP, Fram$diaBP, Fram$BMI, Fram$heartRate, Fram$glucose) 
+
+#Covariance Matrix
+cov(FramPCA[2:9])
+```
+
+Run PCA: using only numerical variables. 
+Data is scaled as the variables have varying units of measure and also very different ranges. It is critical to perform such standardization prior to conducting PCA, as PCA is very sensitive when it comes to explaining the variances of the initial variables. If there are large differences between the ranges of initial variables, those variables with larger ranges will dominate over those with small ranges (For example, a variable that ranges between 0 and 100 will dominate over a variable that ranges between 0 and 1), which will lead to bias in the results. Transforming the data to similar scales can prevent this from happening.
+
+```{r}
+pr.out <- prcomp(FramPCA[2:9], scale = TRUE)
+pr.out
+summary(pr.out)
+```
+
+We notice that the first 3 components have an Eigenvalue >1 (Eigenvalue here represents both Standard Deviation and Variance). An Eigenvalue<1 would mean that the component actually explains less than a single explanatory variable and we would like to discard those. Our discussion going forward will include only the first three principal components i.e. PC1, PC2 and PC3!
+
+Principal Component 1 - PC1 explains 30.1% of the variance and is primarily a measure of blood pressure(both systolic and diastolic) and from the covariance matrix we know that they are both positively correlated and are indicated as so in PC1. 
+Principal Component 2 - PC2 explains 14.54% of the variance and is primarily a measure of heart rate, cigs per day and age. An interesting trend to note here: age and cigs per day which are negatively correlated continue to be indicated as so in both PC1 and PC2.
+Principal Component 3 - PC3 explains 12.785 of the variance and is primarily a measure of glucose.
+
+Combined the three PCs explain around 57.4% of the variance, which is not very significant. If our data is well suited for PCA we should be able to discard the components with eigenvalues<1 while retaining at least 70–80% of cumulative variance. 
+
+We start seeing signs right off that PCA might not be very useful to explain our data with only numerical variables and tenYearCHD risk will need the other categorical variables to be properly classified. 
+
+Let's take a look at the screeplot and cummulative variance plots which represent the above analysis in a graph form and help us understand better.
+
+```{r}
+pve <- pr.out$sdev^2/sum(pr.out$sdev^2)
+
+screeplot(pr.out, type = "l", npcs = 8, main = "Screeplot of the 8 PCs", xlim = NULL, ylim = c(0,3))
+abline(h = 1, col="red", lty=5)
+legend("topright", legend=c("Eigenvalue = 1"),
+       col=c("red"), lty=5, cex=0.6)
+```
+
+```{r}
+plot(cumsum(pve), xlab = "PC #", ylab = "Amount of explained variance", main = "Cumulative variance plot")
+abline(v = 3, col="blue", lty=5)
+abline(h = 0.5741336, col="blue", lty=5)
+legend("topleft", legend=c("Cut-off @ PC3"),
+       col=c("blue"), lty=5, cex=0.6)
+```
+
+```{r include = FALSE}
+library("factoextra")
+fviz_pca_ind(pr.out, geom.ind = "point", pointshape = 21, 
+             pointsize = 1, 
+             fill.ind = FramPCA$Fram.TenYearCHD, 
+             col.ind = "black", 
+             palette = "jco", 
+             addEllipses = TRUE,
+             label = "var",
+             col.var = "black",
+             repel = TRUE,
+             legend.title = "Diagnosis") +
+  ggtitle("2D PCA-plot") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+fviz_pca_ind(pr.out,axes = c(2,3), geom.ind = "point", pointshape = 21, 
+             pointsize = 1, 
+             fill.ind = FramPCA$Fram.TenYearCHD, 
+             col.ind = "black", 
+             palette = "jco", 
+             addEllipses = TRUE,
+             label = "var",
+             col.var = "black",
+             repel = TRUE,
+             legend.title = "Diagnosis") +
+  ggtitle("2D PCA-plot") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+fviz_pca_ind(pr.out,axes = c(1,3), geom.ind = "point", pointshape = 21, 
+             pointsize = 1, 
+             fill.ind = FramPCA$Fram.TenYearCHD, 
+             col.ind = "black", 
+             palette = "jco", 
+             addEllipses = TRUE,
+             label = "var",
+             col.var = "black",
+             repel = TRUE,
+             legend.title = "Diagnosis") +
+  ggtitle("2D PCA-plot") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Notice that in all the three plots above there is no clear clusters formed based on the different principal components. This indicates that the numerical variables used in the PCA and the principal components formed using them are not good for classification as all three PCs intersect almost completely.
+
+Data is not suitable for conducting PCA and the numerical variables themselves not have enough classification power!
+
+## Results:
+
+In our quest for predicting the CHD risk of Framingham's residents in ten years, the logistic model proved to be the most efficient. The key takeaways from the logistic model are:
+
+- Older people are more likely to have a CHD in ten years if all the other features remain constant.
+- Males are more likely to have a CHD than women if all the other variables remain the same
+- People with previous stroke are more likely to have a CHD in ten years.
+- People who smoke more have a higher chance of CHD in ten years
+- People with higher systolic BP or higher glucose or higher total cholesterol have a higher CHD risk in ten years.
+
+Our initial assumption was that the BMI affects the CHD risk, but it was not chosen by our model. We assume that the inclusion of the other variables such as sysBP, age, gender, glucose, and totChol has made up for the impact of BMI.   
+
+The linear regression model to predict the systolic BP proved that systolic BP is positively influenced by hypertension occurrence in the past (prevHyp), total cholesterol, heart rate, glucose, BMI and age. 
+
+Based on linear regression as well as the regression tree, hypertension history affects the systolic BP the most. According to the regression tree, if the residents have no previous hypertension then BMI influences their systolic BP and if there the residents have previous hypertension then their age affects their systolic BP.
+
+## Future scope and limitations of our analysis:
+
+The dataset relates only to the residents of Framingham, Massachusetts. Our models cannot be applied to residents in other parts of the U.S. This is because the conditions such as weather, diversity and lifestyle are limited to Framingham and do not represent the entire population of the U.S.
+
+Inclusion of more variables such as income, ethnicity, indicators of regular exercise, diet, etc. might lead to more interesting trends and help us build better models for predicting ten year CHD risk.
+
+Additional information about smoking history and patterns could help us better predict the influence of smoking on the risk of CHD in ten years. (see above in Logistic Regression Visualization for more details)
+
+## Conclusion:
+
+As you grow older the risk of CHD goes up. Take more care of your health and get regular checkups done to avoid the risk of CHD or to be able to detect it before it gets fatal. Maintain a healthy lifestyle. Exercise regularly, do not over indulge in activities such as smoking, eating fast food and sugary food that will affect your health negatively. 
+
+Males seem to be more susceptible to CHD as they age and hence need to take more care.
+
+
